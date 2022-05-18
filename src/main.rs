@@ -68,18 +68,6 @@ fn match_loops(commands: &mut Vec<Command>) {
 
         idx += 1;
     }
-
-    // for (idx, command) in commands.iter_mut().enumerate() {
-    //     match command.operation {
-    //         Operation::LoopIn => loop_stack.push(idx),
-    //         Operation::LoopOut => {
-    //             let v = loop_stack.pop();
-    //             command.matching_bracket = v;
-    //             // commands[v.unwrap()].matching_bracket = Some(idx);
-    //         }
-    //         _ => {}
-    //     }
-    // }
 }
 
 const MEMORY_SIZE: usize = 30000;
@@ -129,12 +117,24 @@ fn parse(commands: &mut Vec<Command>) {
                 print!("{}", memory[sp] as char);
                 ip += 1
             }
-            Operation::Inp => panic!("not implemented"),
+            Operation::Inp => {
+                let mut userinput: [u8; 1] = [0];
+                std::io::stdin().read(&mut userinput).unwrap();
+                // println!("{}", userinput[0]);
+                memory[sp] = userinput[0];
+                ip += 1
+            }
         }
     }
 
     println!("");
     // println!("{:?}", commands);
+}
+
+fn compile(commands: &mut Vec<Command>) {
+    match_loops(commands);
+
+    assert!(false, "not implemented");
 }
 
 fn lex(fd: &File) -> io::Result<Vec<Command>> {
@@ -206,7 +206,8 @@ fn main() -> io::Result<()> {
     let file: File = File::open(program_path)?;
 
     let mut commands = lex(&file)?;
-    parse(&mut commands);
+    // parse(&mut commands);
+    compile(&mut commands);
 
     Ok(())
 }
