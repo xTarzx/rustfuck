@@ -72,7 +72,7 @@ fn match_loops(commands: &mut Vec<Command>) {
 
 const MEMORY_SIZE: usize = 30000;
 
-fn parse(commands: &mut Vec<Command>) {
+fn simulate(commands: &mut Vec<Command>) {
     match_loops(commands);
 
     let mut memory: [u8; MEMORY_SIZE] = [0; MEMORY_SIZE];
@@ -134,7 +134,106 @@ fn parse(commands: &mut Vec<Command>) {
 fn compile(commands: &mut Vec<Command>) {
     match_loops(commands);
 
-    assert!(false, "not implemented");
+    let mut file = File::create("./output.asm").unwrap();
+
+    // HEADER
+    writeln!(file, "section .text").unwrap();
+    writeln!(file, "%define SYS_exit 60").unwrap();
+    writeln!(file, "%define SYS_write 1").unwrap();
+    writeln!(file, "%define SYS_exit 60").unwrap();
+    writeln!(file, "%define STDIN  0").unwrap();
+    writeln!(file, "%define STDOUT 1").unwrap();
+    writeln!(file, "%define STDERR 2").unwrap();
+    writeln!(file, "global _start").unwrap();
+    writeln!(file, "_start:").unwrap();
+
+    for (idx, command) in commands.iter().enumerate() {
+        match command.operation {
+            Operation::Inc => {
+                writeln!(file, "    ;; -- INC").unwrap();
+                // calculate offset
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+
+                // get value and increment
+                writeln!(file, "    mov r9, [r8]").unwrap();
+                writeln!(file, "    inc r9").unwrap();
+
+                // mov it back to stack+offset
+                writeln!(file, "    mov [r8], r9").unwrap();
+            }
+            Operation::Dec => {
+                writeln!(file, "    ;; -- DEC").unwrap();
+                // calculate offset
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+
+                // get value and decrement
+                writeln!(file, "    mov r9, [r8]").unwrap();
+                writeln!(file, "    dec r9").unwrap();
+
+                // mov it back to stack+offset
+                writeln!(file, "    mov [r8], r9").unwrap();
+            }
+            Operation::MvR => {
+                writeln!(file, "    ;; -- MvR").unwrap();
+                writeln!(file, "    mov r8, [stackpointer]").unwrap();
+                writeln!(file, "    inc r8").unwrap();
+                writeln!(file, "    mov [stackpointer], r8").unwrap();
+            }
+            Operation::MvL => {
+                writeln!(file, "    ;; -- MvL").unwrap();
+                writeln!(file, "    mov r8, [stackpointer]").unwrap();
+                writeln!(file, "    dec r8").unwrap();
+                writeln!(file, "    mov [stackpointer], r8").unwrap();
+            }
+            Operation::LoopIn => {
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+                writeln!(file, "    cmp byte [r8], 0").unwrap();
+                writeln!(file, "    je label{}", command.matching_bracket.unwrap()).unwrap();
+                writeln!(file, "label{}:", idx).unwrap();
+            }
+            Operation::LoopOut => {
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+                writeln!(file, "    cmp byte [r8], 0").unwrap();
+                writeln!(file, "    jne label{}", command.matching_bracket.unwrap()).unwrap();
+                writeln!(file, "label{}:", idx).unwrap();
+            }
+            Operation::Out => {
+                // calculate offset
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+
+                // prepare syscall
+                writeln!(file, "    mov rax, SYS_write").unwrap();
+                writeln!(file, "    mov rdi, STDOUT").unwrap();
+                writeln!(file, "    mov rsi, r8").unwrap();
+                writeln!(file, "    mov rdx, 1").unwrap();
+                writeln!(file, "    syscall").unwrap();
+            }
+            Operation::Inp => {
+                assert!(false, "not implemented")
+            }
+        }
+    }
+
+    // FOOTER
+    writeln!(file, "    mov rax, SYS_write").unwrap();
+    writeln!(file, "    mov rdi, STDOUT").unwrap();
+    writeln!(file, "    mov rsi, newline").unwrap();
+    writeln!(file, "    mov rdx, 1").unwrap();
+    writeln!(file, "    syscall").unwrap();
+
+    writeln!(file, "    mov rax, SYS_exit").unwrap();
+    writeln!(file, "    mov rdi, 0").unwrap();
+    writeln!(file, "    syscall").unwrap();
+    writeln!(file, "section .data").unwrap();
+    writeln!(file, "    newline: db 10").unwrap();
+    writeln!(file, "segment .bss").unwrap();
+    writeln!(file, "    stack: resb 30000").unwrap();
+    writeln!(file, "    stackpointer: resb 1").unwrap();
 }
 
 fn lex(fd: &File) -> io::Result<Vec<Command>> {
@@ -193,21 +292,53 @@ fn lex(fd: &File) -> io::Result<Vec<Command>> {
     Ok(commands)
 }
 
-fn main() -> io::Result<()> {
-    let args: Vec<String> = env::args().collect();
+fn usage(program_name: String) {
+    println!("usage: {} [sim|com] program_path", program_name)
+}
 
-    if args.len() < 2 {
-        println!("no program specified");
-        std::process::exit(0);
+fn main() -> io::Result<()> {
+    let mut args: Vec<String> = env::args().rev().collect();
+
+    let program_name = args.pop().unwrap();
+
+    if args.len() < 1 {
+        usage(program_name);
+        eprintln!("ERROR: no command specified");
+        std::process::exit(1);
     }
 
-    let program_path: &String = args.get(1).unwrap();
+    let command = args.pop().unwrap();
 
+    if args.len() < 1 {
+        usage(program_name);
+        eprintln!("ERROR: no program specified");
+        std::process::exit(1);
+    }
+    let program_path: String = args.pop().unwrap();
     let file: File = File::open(program_path)?;
-
     let mut commands = lex(&file)?;
-    // parse(&mut commands);
-    compile(&mut commands);
+
+    match command.as_str() {
+        "sim" => {
+            simulate(&mut commands);
+        }
+
+        "com" => {
+            compile(&mut commands);
+
+            std::process::Command::new("nasm")
+                .arg("-f")
+                .arg("elf64")
+                .arg("./output.asm")
+                .spawn()
+                .expect("error running nasm");
+        }
+        other => {
+            usage(program_name);
+            eprintln!("ERROR: unknown command `{}`", other);
+            std::process::exit(1);
+        }
+    }
 
     Ok(())
 }
