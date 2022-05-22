@@ -138,7 +138,7 @@ fn compile(commands: &mut Vec<Command>) {
 
     // HEADER
     writeln!(file, "section .text").unwrap();
-    writeln!(file, "%define SYS_exit 60").unwrap();
+    writeln!(file, "%define SYS_read  0").unwrap();
     writeln!(file, "%define SYS_write 1").unwrap();
     writeln!(file, "%define SYS_exit 60").unwrap();
     writeln!(file, "%define STDIN  0").unwrap();
@@ -214,7 +214,16 @@ fn compile(commands: &mut Vec<Command>) {
                 writeln!(file, "    syscall").unwrap();
             }
             Operation::Inp => {
-                assert!(false, "not implemented")
+                // calculate offset
+                writeln!(file, "    mov r8, stack").unwrap();
+                writeln!(file, "    add r8, [stackpointer]").unwrap();
+
+                // read input
+                writeln!(file, "    mov rax, SYS_read").unwrap();
+                writeln!(file, "    mov rdi, STDIN").unwrap();
+                writeln!(file, "    mov rsi, r8").unwrap();
+                writeln!(file, "    mov rdx, 1").unwrap();
+                writeln!(file, "    syscall").unwrap();
             }
         }
     }
